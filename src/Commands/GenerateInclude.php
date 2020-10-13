@@ -1,4 +1,6 @@
-<?php namespace MartinLindhe\VueInternationalizationGenerator\Commands;
+<?php
+
+namespace QuibaX\VueInternationalizationGenerator\Commands;
 
 use Illuminate\Console\Command;
 
