@@ -4,7 +4,7 @@ namespace QuibaX\VueInternationalizationGenerator\Commands;
 
 use Illuminate\Console\Command;
 
-use MartinLindhe\VueInternationalizationGenerator\Generator;
+use QuibaX\VueInternationalizationGenerator\Generator;
 
 class GenerateInclude extends Command
 {
