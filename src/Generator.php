@@ -5,6 +5,8 @@ namespace QuibaX\VueInternationalizationGenerator;
 use DirectoryIterator;
 use Exception;
 use App;
+use RecursiveArrayIterator;
+use RecursiveIteratorIterator;
 use Traversable;
 
 class Generator
@@ -59,7 +61,7 @@ class Generator
         $jsBody = '';
         foreach ($dir as $fileinfo) {
             if (!$fileinfo->isDot()) {
-                if(!$withVendor
+                if (!$withVendor
                     && in_array($fileinfo->getFilename(), array_merge(['vendor'], $this->config['excludes']))
                 ) {
                     continue;
@@ -83,7 +85,9 @@ class Generator
                     $local = $this->allocateLocaleArray($fileinfo->getRealPath());
                 } else {
                     $local = $this->allocateLocaleJSON($fileinfo->getRealPath());
-                    if ($local === null) continue;
+                    if ($local === null) {
+                        continue;
+                    }
                 }
 
                 if (isset($locales[$noExt])) {
@@ -95,6 +99,11 @@ class Generator
         }
 
         $locales = $this->adjustVendor($locales);
+        
+        if (class_exists('App')) {
+            // Translate for every locale so we get the latest value from the valid source (for example from DB if installed)
+            $locales = $this->translateLocales($locales);
+        }
 
         $jsonLocales = json_encode($locales, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
 
@@ -112,6 +121,55 @@ class Generator
         }
 
         return $jsBody;
+    }
+
+    protected function translateLocales(array $locales, $keysFromLocale = 'en')
+    {
+        $result = [];
+
+        // $locales = ['en' => $locales['en']];
+
+        foreach ($locales as $locale => $localeItems) {
+            App::setLocale($locale);
+
+            $result[$locale] = $this->translateLocaleItems($localeItems);
+        }
+
+        return $result;
+    }
+
+    protected function translateLocaleItems(array $localeItems, $baseKey = null)
+    {
+        $result = [];
+        foreach ($localeItems as $key => $value) {
+            $fullKey = $baseKey ? $baseKey . '.' . $key : $key;
+
+            if (is_array($value)) {
+                $result[$key] = $this->translateLocaleItems($value, $fullKey);
+            } else {
+                // Here we translate getting from registered source directly using the trans helper
+                $translation = trans($fullKey);
+                // only if the translation is valid we will replace value by the translation
+                $result[$key] = $translation === $fullKey ? $value : $translation;
+            }
+        }
+
+        return $result;
+    }
+
+    protected function getDotNotationLocaleItems(array $localeItems)
+    {
+        $iterator = new RecursiveIteratorIterator(new RecursiveArrayIterator($localeItems));
+        $result = array();
+        foreach ($iterator as $value) {
+            $keys = array();
+            foreach (range(0, $iterator->getDepth()) as $depth) {
+                $keys[] = $iterator->getSubIterator($depth)->key();
+            }
+            $result[ join('.', $keys) ] = $value;
+        }
+
+        return $result;
     }
 
     /**
@@ -148,7 +206,9 @@ class Generator
                         $local = $this->allocateLocaleArray($fileinfo->getRealPath(), $multiLocales);
                     } else {
                         $local = $this->allocateLocaleJSON($fileinfo->getRealPath());
-                        if ($local === null) continue;
+                        if ($local === null) {
+                            continue;
+                        }
                     }
 
                     if (isset($locales[$noExt])) {
@@ -243,7 +303,7 @@ class Generator
                 if ($lastLocale !== false) {
                     $root = realpath(base_path() . $this->config['langPath'] . DIRECTORY_SEPARATOR . $lastLocale);
                     $filePath = $this->removeExtension(str_replace('\\', '_', ltrim(str_replace($root, '', realpath($fileName)), '\\')));
-                    if($filePath[0] === DIRECTORY_SEPARATOR) {
+                    if ($filePath[0] === DIRECTORY_SEPARATOR) {
                         $filePath = substr($filePath, 1);
                     }
                     if ($multiLocales) {
